@@ -165,12 +165,51 @@ void printMenu(void) {
       Serial.println(F("[x] GPS fix status (FONA808 v1 only)"));
     }
     Serial.println(F("[E] Raw NMEA out (FONA808)"));
+    Serial.println(F("[z] Satellite Count"));
   }
   
   Serial.println(F("[S] create Serial passthru tunnel"));
   Serial.println(F("-------------------------------------"));
   Serial.println(F(""));
+/*
+fona.enableGPRS(true)//enables post ability and cell based location services
+fona.enableGPS(true)
+fona.enableGPSNMEA(1);//0 nmea off 1 nema on (streaming)
+uint16_t vpct; fona.getBattPercent(&vpct);
+fona.getSIMCCID(replybuffer);  // make sure replybuffer is at least 21 bytes!
+uint16_t returncode;fona.getGSMLoc(&returncode, replybuffer, 250);
+*/
 
+// Post data to website http://wilsonja.pythonanywhere.com/
+uint16_t statuscode;
+int16_t length;
+char url[80];
+char data[80];
+flushSerial();
+readline(url, 79);
+readline(data, 79);
+
+fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
+        while (length > 0) {
+          while (fona.available()) {
+            char c = fona.read();
+
+            #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+            loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+            UDR0 = c;
+            #else
+              Serial.write(c);
+            #endif
+
+            length--;
+            if (! length) break;
+          }
+        }
+        fona.HTTP_POST_end();
+
+/*
+
+*/
 }
 void loop() {
   Serial.print(F("FONA> "));
@@ -686,6 +725,17 @@ void loop() {
         break;
       }
 
+    case 'z': {//
+        char gpsdata[120];
+        fona.getGPS(0, gpsdata, 120);
+        if (type == FONA808_V1) {
+          Serial.print(F("GPS NMEA output sentences (0 = off, 34 = RMC+GGA, 255 = all)"));
+        } else {
+          Serial.println(F("Reply in format: mode,fixstatus,utctime(yyyymmddHHMMSS),latitude,longitude,altitude,speed,course,fixmode,reserved1,HDOP,PDOP,VDOP,reserved2,view_satellites,used_satellites,reserved3,C/N0max,HPA,VPA"));
+          Serial.println(gpsdata);
+        }
+        break;
+      }
     /*********************************** GPRS */
 
     case 'g': {
@@ -752,7 +802,7 @@ void loop() {
       }
 
     case 'W': {
-        // Post data to website
+        // Post data to website http://wilsonja.pythonanywhere.com/
         uint16_t statuscode;
         int16_t length;
         char url[80];
