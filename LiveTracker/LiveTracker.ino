@@ -67,7 +67,6 @@ void setup() {
 }
 
 void loop() {
-  delay(1000);
   int8_t stat;
   stat = fona.GPSstatus();
   if (stat < 0)
@@ -83,34 +82,35 @@ void loop() {
   } else {
     Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
   }
-/*
+  delay(10000);
+
 // Post data to website http://wilsonja.pythonanywhere.com/
-uint16_t statuscode;
-int16_t length;
-char url[80];
-char data[80];
-flushSerial();
-readline(url, 79);
-readline(data, 79);
-
-fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
-        while (length > 0) {
-          while (fona.available()) {
-            char c = fona.read();
-
-            #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-            loop_until_bit_is_set(UCSR0A, UDRE0); // Wait until data register empty.
-            UDR0 = c;
-            #else
-              Serial.write(c);
-            #endif
-
-            length--;
-            if (! length) break;
-          }
-        }
-        fona.HTTP_POST_end();
-*/
+  uint16_t statuscode;
+  int16_t length;
+  char url[160] = "http://wilsonja.pythonanywhere.com/?ID=123456789&lat=999&lon=777";
+  char data[80];
+  flushSerial();
+  //readline(url, 79);
+  //readline(data, 79);
+  
+  fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
+  while (length > 0) {
+    while (fona.available()) {
+      char c = fona.read();
+  
+      #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+      loop_until_bit_is_set(UCSR0A, UDRE0); // Wait until data register empty.
+      UDR0 = c;
+      #else
+        Serial.write(c);
+      #endif
+  
+      length--;
+      if (! length) break;
+    }
+  }
+  fona.HTTP_POST_end();
+  delay(10000);
 }
 
 void flushSerial() {
