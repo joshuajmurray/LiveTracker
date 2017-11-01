@@ -85,8 +85,7 @@ void loop() {
   int8_t stat;
   stat = fona.GPSstatus();
   postData.gps_sig = stat;
-  if (stat < 0)
-    Serial.println(F("Failed to query"));
+  if (stat < 0)  Serial.println(F("Failed to query"));
   if (stat == 0) Serial.println(F("GPS off"));
   if (stat == 1) Serial.println(F("No fix"));
   if (stat == 2) Serial.println(F("2D fix"));
@@ -120,39 +119,46 @@ void loop() {
   if(stat == 2 || stat == 3) {
   postData = parseGPS(postData, gpsdata);
 
-//  delay(10000);//temp delay to reduce the post freq during testing
+  delay(10000);//temp delay to reduce the post freq during testing
 
   Serial.println("Data to POST: ");
-  Serial.println(buildPost(postData));
+  String temp = buildPost(postData);
+  Serial.println(temp);
+  Serial.println(temp.length());
   Serial.println("*******DONE*******");
 
-//  uint16_t statuscode;
-//  int16_t length;
+  uint16_t statuscode;
+  int16_t length;
+  char url[160];
+  temp.toCharArray(url,temp.length());
 //  char url[160] = "http://wilsonja.pythonanywhere.com/?ID=123456789&lat=999&lon=777";
-//  char data[80];
-//  flushSerial();
-//  //readline(url, 79);
-//  //readline(data, 79);
-//  
-//  fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
-//  while (length > 0) {
-//    while (fona.available()) {
-//      char c = fona.read();
-//  
-//      #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-//      loop_until_bit_is_set(UCSR0A, UDRE0); // Wait until data register empty.
-//      UDR0 = c;
-//      #else
-//        Serial.write(c);
-//      #endif
-//  
-//      length--;
-//      if (! length) break;
-//    }
-//  }
+//http://wilsonja.pythonanywhere.com/?ID=123456789&lat=1111&lon=2222 //example post
+  char data[80];
+  flushSerial();
+  //readline(url, 79);
+  //readline(data, 79);
+
+  Serial.println("*******POSTING*******");
+  fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
+  while (length > 0) {
+    while (fona.available()) {
+      char c = fona.read();
   
-//  fona.HTTP_POST_end();
-//  delay(10000);//temp delay to reduce the post freq during testing
+      #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+      loop_until_bit_is_set(UCSR0A, UDRE0); // Wait until data register empty.
+      UDR0 = c;
+      #else
+        Serial.write(c);
+      #endif
+  
+      length--;
+      if (! length) break;
+    }
+  }
+  
+  fona.HTTP_POST_end();
+  Serial.println("*******POST DONE*******");
+  delay(10000);//temp delay to reduce the post freq during testing
   }
 }
 
