@@ -181,8 +181,8 @@ String buildPost(TRACKER_DATA postData) {
   post += POST_URL;
   post += "id=";
   post += postData.id;
-//  post += "ts=";
-//  post += postData.ts;
+  post += "&ts=";
+  post += postData.ts;
   post += "&lat=";
   post += postData.lat;
   post += "&lon=";
@@ -204,11 +204,11 @@ TRACKER_DATA parseGPS(TRACKER_DATA data, String gps) {
   Serial.println("GPS WHOLE: " + gps);
   int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
-  Serial.println("TIME FOUND: " + gps.substring(dataStart,dataEnd));
+//  Serial.println("TIME FOUND: " + gps.substring(dataStart,dataEnd));
+  data.ts = gps.substring(dataStart,dataEnd);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
-  data.ts = gps.substring(dataStart,dataEnd);
-  Serial.println("LAT FOUND: " + gps.substring(dataStart,dataEnd));
+//  Serial.println("LAT FOUND: " + gps.substring(dataStart,dataEnd));
   data.lat = gps.substring(dataStart,dataEnd);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
