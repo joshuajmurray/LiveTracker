@@ -65,6 +65,7 @@ void setup() {
     Serial.println(F("Couldn't find FONA"));
     while (1);
   }
+  
   type = fona.type();
   Serial.println(F("FONA is OK"));
   Serial.print(F("Found "));

@@ -18,6 +18,7 @@ uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 uint8_t type;
 struct TRACKER_DATA {
   String id;
+  String ts;//time stamp
   String lat;
   String lon;
   String alt;
@@ -34,6 +35,16 @@ void setup() {
   Serial.begin(115200);
   Serial.println(F("FONA basic test"));
   Serial.println(F("Initializing....(May take 3 seconds)"));
+
+  postData.id = "0";
+  postData.ts = "0";
+  postData.lat = "0";
+  postData.lon = "0";
+  postData.alt = "0";
+  postData.spd = "0";
+  postData.gps_sig = "0";
+  postData.cell_sig = "0";
+  postData.batt = "0";
 
   fonaSerial->begin(4800);
   if (! fona.begin(*fonaSerial)) {
@@ -98,7 +109,7 @@ void loop() {
     Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
    postData.batt = vbat; 
   }
-  // check for GSMLOC (requires GPRS)*******start******
+// check for GSMLOC (requires GPRS)*******start******
 //  uint16_t returncode;  
 //  if (!fona.getGSMLoc(&returncode, replybuffer, 250))
 //    Serial.println(F("GPS Failed!"));
@@ -108,70 +119,76 @@ void loop() {
 //  } else {
 //    Serial.print(F("Fail code #")); Serial.println(returncode);
 //  }
-  // check for GSMLOC (requires GPRS)*******end******
+// check for GSMLOC (requires GPRS)*******end******
 
-  // check for GPS location******start********
+// check for GPS location******start********
   char gpsdata[120];
   fona.getGPS(0, gpsdata, 120);
 //  Serial.println(F("Reply in format: mode,fixstatus,utctime(yyyymmddHHMMSS),latitude,longitude,altitude,speed,course,fixmode,reserved1,HDOP,PDOP,VDOP,reserved2,view_satellites,used_satellites,reserved3,C/N0max,HPA,VPA"));
-//  Serial.println(gpsdata);
-  // check for GPS location******end********
+// check for GPS location******end********
+
   if(stat == 2 || stat == 3) {
-  postData = parseGPS(postData, gpsdata);
-
-  delay(10000);//temp delay to reduce the post freq during testing
-
-  Serial.println("Data to POST: ");
-  String temp = buildPost(postData);
-  Serial.println(temp);
-  Serial.println(temp.length());
-  Serial.println("*******DONE*******");
-
-  uint16_t statuscode;
-  int16_t length;
-  char url[160];
-  temp.toCharArray(url,temp.length());
-//  char url[160] = "http://wilsonja.pythonanywhere.com/?ID=123456789&lat=999&lon=777";
-//http://wilsonja.pythonanywhere.com/?ID=123456789&lat=1111&lon=2222 //example post
-  char data[80];
-  flushSerial();
-  //readline(url, 79);
-  //readline(data, 79);
-
-  Serial.println("*******POSTING*******");
-  fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length);
-  while (length > 0) {
-    while (fona.available()) {
-      char c = fona.read();
+    postData = parseGPS(postData, gpsdata);
   
+    delay(10000);//temp delay to reduce the post freq during testing
+  
+    Serial.println("Data to POST: ");
+    String temp = buildPost(postData);
+    Serial.println(temp);
+    Serial.println(temp.length());
+  
+    uint16_t statuscode;
+    int16_t length;
+    char url[160];
+    temp.toCharArray(url,temp.length()+1);
+    char data[1] = {' '};//need to look into the adafruit library but this works for now..     
+    flushSerial();
+//    Serial.print("URL: ");Serial.println(url);
+//    Serial.print("DATA: ");Serial.println(data);
+    
+    Serial.println(F("****"));
+    if (!fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
+      Serial.println("Failed!");
+    }else {
+      while (length > 0) {
+        while (fona.available()) {
+          char c = fona.read();
+      
       #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-      loop_until_bit_is_set(UCSR0A, UDRE0); // Wait until data register empty.
-      UDR0 = c;
+          loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+          UDR0 = c;
       #else
-        Serial.write(c);
+          Serial.write(c);
       #endif
-  
-      length--;
-      if (! length) break;
+      
+          length--;
+          if (! length) break;
+        }
+      }
+    
+      Serial.println(F("\n****"));
+      fona.HTTP_POST_end();
     }
-  }
-  
-  fona.HTTP_POST_end();
-  Serial.println("*******POST DONE*******");
-  delay(10000);//temp delay to reduce the post freq during testing
-  }
+
+    Serial.println("*******POST DONE*******");
+    delay(10000);//temp delay to reduce the post freq during testing
+  }//end of case for needing 3dfix
 }
 
 String buildPost(TRACKER_DATA postData) {
  //build post
   String post;
   post += POST_URL;
-  post += "ID=";
+  post += "id=";
   post += postData.id;
+//  post += "ts=";
+//  post += postData.ts;
   post += "&lat=";
   post += postData.lat;
   post += "&lon=";
   post += postData.lon;
+  post += "&alt=";
+  post += postData.alt;
   post += "&spd=";
   post += postData.spd;
   post += "&gps_sig=";
@@ -185,9 +202,13 @@ String buildPost(TRACKER_DATA postData) {
 
 TRACKER_DATA parseGPS(TRACKER_DATA data, String gps) {
   Serial.println("GPS WHOLE: " + gps);
-  int dataStart = (gps.indexOf(',',4)+1);
+  int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
-//  Serial.println("LAT FOUND: " + gps.substring(dataStart,dataEnd));
+  Serial.println("TIME FOUND: " + gps.substring(dataStart,dataEnd));
+  dataStart = dataEnd+1;
+  dataEnd = gps.indexOf(',',dataEnd+1);
+  data.ts = gps.substring(dataStart,dataEnd);
+  Serial.println("LAT FOUND: " + gps.substring(dataStart,dataEnd));
   data.lat = gps.substring(dataStart,dataEnd);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
