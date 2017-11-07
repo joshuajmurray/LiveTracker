@@ -4,6 +4,7 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
+#define TEST_MODE true
 
 char replybuffer[255];// this is a large buffer for replies
 
@@ -127,7 +128,7 @@ void loop() {
 //  Serial.println(F("Reply in format: mode,fixstatus,utctime(yyyymmddHHMMSS),latitude,longitude,altitude,speed,course,fixmode,reserved1,HDOP,PDOP,VDOP,reserved2,view_satellites,used_satellites,reserved3,C/N0max,HPA,VPA"));
 // check for GPS location******end********
 
-  if(stat == 2 || stat == 3) {
+  if(stat == 2 || stat == 3 && !TEST_MODE) {
     postData = parseGPS(postData, gpsdata);
   
     delay(10000);//temp delay to reduce the post freq during testing
