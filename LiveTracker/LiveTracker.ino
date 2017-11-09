@@ -1,12 +1,15 @@
-#include "Adafruit_FONA.h"
+#include <Adafruit_FONA.h>
+#include <EEPROM.h>
 
 #define FONA_RX 2
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
 #define TEST_MODE true
+//#define TEST_MODE false
 #define LOOP_TIME 1000
 #define POST_TIME 20000
+#define TRIP_MEM_LOCATION 0
 
 //state machine states
 #define INIT_STATE 0
@@ -24,8 +27,11 @@ SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
-
+char gpsdata[120];
+int8_t stat;
+String temp;
 uint8_t type;
+
 struct TRACKER_DATA {
   String id;
   String ts;//time stamp
@@ -35,7 +41,8 @@ struct TRACKER_DATA {
   String spd;
   String gps_sig;
   String cell_sig;
-  String batt;  
+  String batt;
+  String trp;
 };
 TRACKER_DATA postData; 
 
@@ -105,19 +112,19 @@ void setup() {
   while(!fona.enableGPRS(true));//enables post ability and cell based location services
   while(!fona.enableGPS(true));//enable gps module
   postData.id = imei;
+  byte val = (byte)EEPROM.read(TRIP_MEM_LOCATION);
+  postData.trp = val++; //increment the trip on powerup
+  EEPROM.write(TRIP_MEM_LOCATION, val);//write back to eeprom (it's only 1 byte!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
 }
 
 void loop() {
-//#define INIT_STATE 0
-//#define ERROR_STATE 1
-//#define GET_DATA_STATE 2
-//#define WAIT_STATE 3
-//#define POST_STATE 4
-delay(100);
+
+  delay(100);
+
   switch(state) {
     case INIT_STATE://*************************************************************************
       Serial.println("INIT STUFF");
-
+//      init stuff here
       state = WAIT_STATE;
       break;
     case ERROR_STATE://*************************************************************************
@@ -126,29 +133,31 @@ delay(100);
       state = INIT_STATE;
       break;
     case GET_DATA_STATE://*************************************************************************
-      Serial.println("GET INFO");
-      // check for GPS location******start********
-      char gpsdata[120];
+//      Serial.println("GET INFO");
       fona.getGPS(0, gpsdata, 120);
-      // check for GPS location******end********
-      // check for GPS status********start********
-      int8_t stat;
+      stat = fona.GPSstatus();
       postData.gps_sig = stat;
-      if (stat < 0)  Serial.println(F("Failed to query"));
-      if (stat == 0) Serial.println(F("GPS off"));
-      if (stat == 1) Serial.println(F("No fix"));
-      if (stat == 2) Serial.println(F("2D fix"));
-      if (stat == 3) Serial.println(F("3D fix"));
-      // check for GPS status********end********
-      // check for Battery status********start********
+//      switch(stat) {
+//        case 0:
+//          Serial.println(F("GPS off"));
+//          break;
+//        case 1:
+//          Serial.println(F("No fix"));
+//          break;
+//        case 2:
+//          Serial.println(F("2D fix"));
+//          break;
+//        case 3:
+//          Serial.println(F("3D fix"));
+//          break;
+//        default:
+//          Serial.println(F("Failed to query"));
+//          break;
+//      }
       uint16_t vbat;
-      if (! fona.getBattPercent(&vbat)) {
-        Serial.println(F("Failed to read Batt"));
-      } else {
-        Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
-       postData.batt = vbat; 
-      }
-      // check for Battery status********end********
+      fona.getBattPercent(&vbat);
+      postData.batt = vbat; 
+
 //       check for GSMLOC (requires GPRS)*******start******
 //        uint16_t returncode;  
 //        if (!fona.getGSMLoc(&returncode, replybuffer, 250))
@@ -174,16 +183,15 @@ delay(100);
       }
       break;
     case POST_STATE://*************************************************************************
-      Serial.println("POST SOME DATA NOW");
-      if(stat == 2 || stat == 3 && !TEST_MODE) {
+//      Serial.println("POST SOME DATA NOW");
+      if(stat == 2 || stat == 3) {
         postData = parseGPS(postData, gpsdata);
-      
-        delay(10000);//temp delay to reduce the post freq during testing
-      
-        Serial.println("Data to POST: ");
-        String temp = buildPost(postData);
+            
+        Serial.print("POST Data: "); 
+        Serial.println(postData.id);
+        Serial.print("Data to POST: ");
+        temp = buildPost(postData);
         Serial.println(temp);
-        Serial.println(temp.length());
       
         uint16_t statuscode;
         int16_t length;
@@ -191,32 +199,34 @@ delay(100);
         temp.toCharArray(url,temp.length()+1);
         char data[1] = {' '};//need to look into the adafruit library but this works for now..     
         flushSerial();
-        
-        Serial.println(F("****"));
-        if (!fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
-          Serial.println("Failed!");
-        }else {
-          while (length > 0) {
-            while (fona.available()) {
-              char c = fona.read();
-          
-          #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-              loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
-              UDR0 = c;
-          #else
-              Serial.write(c);
-          #endif
-          
-              length--;
-              if (! length) break;
+
+        if(!TEST_MODE) {        
+          Serial.println(F("****"));
+          if (!fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
+            Serial.println("Failed!");
+          }else {
+            while (length > 0) {
+              while (fona.available()) {
+                char c = fona.read();
+            
+            #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+                loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+                UDR0 = c;
+            #else
+                Serial.write(c);
+            #endif
+            
+                length--;
+                if (! length) break;
+              }
             }
+          
+            Serial.println(F("\n****"));
+            fona.HTTP_POST_end();
           }
-        
-          Serial.println(F("\n****"));
-          fona.HTTP_POST_end();
+      
+          Serial.println("*******POST DONE*******");
         }
-    
-        Serial.println("*******POST DONE*******");
       }//end of case for needing 3dfix      state = WAIT_STATE;
 
       state = WAIT_STATE;
@@ -229,8 +239,7 @@ delay(100);
   }
 }
 
-String buildPost(TRACKER_DATA postData) {
- //build post
+String buildPost(TRACKER_DATA postData) {//build post
   String post;
   post += POST_URL;
   post += "id=";
@@ -251,11 +260,12 @@ String buildPost(TRACKER_DATA postData) {
   post += postData.cell_sig;
   post += "&batt=";
   post += postData.batt;
-  return post; 
+  post += "&trp=";
+  post += postData.trp;
+  return post;
 }
 
 TRACKER_DATA parseGPS(TRACKER_DATA data, String gps) {
-  Serial.println("GPS WHOLE: " + gps);
   int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
   data.ts = gps.substring(dataStart,dataEnd);
