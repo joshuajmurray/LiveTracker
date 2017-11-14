@@ -5,9 +5,9 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-#define TEST_MODE true
-//#define TEST_MODE false
-#define LOOP_TIME 1000
+//#define TEST_MODE true
+#define TEST_MODE false
+#define LOOP_TIME 2000
 #define POST_TIME 20000
 #define TRIP_MEM_LOCATION 0
 
@@ -134,6 +134,9 @@ void loop() {
       break;
     case GET_DATA_STATE://*************************************************************************
 //      Serial.println("GET INFO");
+      for(int i = 0; i < 120; i++) {//init buffer before using each time
+        gpsdata[i] = ' ';
+      }
       fona.getGPS(0, gpsdata, 120);
       stat = fona.GPSstatus();
       postData.gps_sig = stat;
@@ -185,14 +188,11 @@ void loop() {
     case POST_STATE://*************************************************************************
 //      Serial.println("POST SOME DATA NOW");
       if(stat == 2 || stat == 3) {
-        postData = parseGPS(postData, gpsdata);
-            
-        Serial.print("POST Data: "); 
-        Serial.println(postData.id);
+        parseGPS(postData, gpsdata);
+
         Serial.print("Data to POST: ");
-        temp = buildPost(postData);
-        Serial.println(temp);
-      
+        temp = buildPost(postData); 
+             
         uint16_t statuscode;
         int16_t length;
         char url[160];
@@ -239,7 +239,7 @@ void loop() {
   }
 }
 
-String buildPost(TRACKER_DATA postData) {//build post
+String buildPost(TRACKER_DATA &postData) {//build post
   String post;
   post += POST_URL;
   post += "id=";
@@ -262,26 +262,46 @@ String buildPost(TRACKER_DATA postData) {//build post
   post += postData.batt;
   post += "&trp=";
   post += postData.trp;
+  printPostData(postData);
+  Serial.print("Post: ");Serial.println(post);
   return post;
 }
 
-TRACKER_DATA parseGPS(TRACKER_DATA data, String gps) {
+void printPostData(TRACKER_DATA &post) {
+  Serial.print("ID: ");Serial.println(post.id);
+  Serial.print("TS: ");Serial.println(post.ts);
+  Serial.print("Lat: ");Serial.println(post.lat);
+  Serial.print("Lon: ");Serial.println(post.lon);
+  Serial.print("Alt: ");Serial.println(post.alt);
+  Serial.print("Spd: ");Serial.println(post.spd);
+  Serial.print("gSig: ");Serial.println(post.gps_sig);
+  Serial.print("cSig: ");Serial.println(post.cell_sig);
+  Serial.print("Batt: ");Serial.println(post.batt);
+  Serial.print("Trp: ");Serial.println(post.trp);
+}
+
+void parseGPS(TRACKER_DATA &data, String gps) {
   int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
   data.ts = gps.substring(dataStart,dataEnd);
+  Serial.print("Ts: ");Serial.println(data.ts);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.lat = gps.substring(dataStart,dataEnd);
+  Serial.print("Lat: ");Serial.println(data.lat);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.lon = gps.substring(dataStart,dataEnd);
+  Serial.print("Lon: ");Serial.println(data.lon);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.alt = gps.substring(dataStart,dataEnd);
+  Serial.print("Alt: ");Serial.println(data.alt);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
-  return data;
+  Serial.print("Spd: ");Serial.println(data.spd);
+//  return data;
 }
 
 void flushSerial() {
