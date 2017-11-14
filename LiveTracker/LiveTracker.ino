@@ -5,10 +5,11 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-//#define TEST_MODE true
-#define TEST_MODE false
-#define LOOP_TIME 2000
-#define POST_TIME 20000
+#define TEST_MODE true
+//#define TEST_MODE false
+#define LOOP_TIME 1000
+#define POST_TIME 16250
+#define ANALOG_READ_TIME 100
 #define TRIP_MEM_LOCATION 0
 
 //state machine states
@@ -17,6 +18,10 @@
 #define GET_DATA_STATE 2
 #define WAIT_STATE 3
 #define POST_STATE 4
+#define READ_ANALOG_STATE 5
+
+#define OK_BUTTON 0
+#define HELP_BUTTON 1
 
 char replybuffer[255];// this is a large buffer for replies
 
@@ -49,10 +54,14 @@ TRACKER_DATA postData;
 int state;
 unsigned long loopTimer;
 unsigned long postTimer;
+unsigned long analogReadTimer;
 
 void setup() {
   while (!Serial);
 
+  pinMode(OK_BUTTON, INPUT);
+  pinMode(HELP_BUTTON, INPUT);
+  
   state = INIT_STATE;
   loopTimer = 0;
   postTimer = 0;
@@ -119,8 +128,6 @@ void setup() {
 
 void loop() {
 
-  delay(100);
-
   switch(state) {
     case INIT_STATE://*************************************************************************
       Serial.println("INIT STUFF");
@@ -177,12 +184,15 @@ void loop() {
       break;
     case WAIT_STATE://*************************************************************************
 //      Serial.println("WAIT  ");
-      if(millis() >= loopTimer) {
-        state = GET_DATA_STATE;
-        loopTimer = (millis() + LOOP_TIME);
-      } else if(millis() >= postTimer) {
+      if(millis() >= postTimer) {
         state = POST_STATE;
         postTimer = (millis() + POST_TIME);
+      }else if(millis() >= loopTimer) {
+        state = GET_DATA_STATE;
+        loopTimer = (millis() + LOOP_TIME);
+      }else if(millis() >= analogReadTimer) {
+        state = READ_ANALOG_STATE;
+        analogReadTimer = (millis() + ANALOG_READ_TIME);
       }
       break;
     case POST_STATE://*************************************************************************
@@ -231,9 +241,14 @@ void loop() {
 
       state = WAIT_STATE;
       break;
+    case READ_ANALOG_STATE://*************************************************************************
+//      Serial.println("READ ANALOGS");
+      Serial.print("ANALOG OK = ");Serial.println(analogRead(OK_BUTTON));
+      Serial.print("ANALOG HELP = ");Serial.println(analogRead(HELP_BUTTON));
+      state = WAIT_STATE;
+      break;
     default://*************************************************************************
       Serial.println("DEFAULT");
-
       state = ERROR_STATE;
       break;
   }
@@ -301,7 +316,6 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
   Serial.print("Spd: ");Serial.println(data.spd);
-//  return data;
 }
 
 void flushSerial() {
