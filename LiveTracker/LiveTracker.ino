@@ -18,10 +18,10 @@
 #define GET_DATA_STATE 2
 #define WAIT_STATE 3
 #define POST_STATE 4
-#define READ_ANALOG_STATE 5
+#define READ_DIGITAL_STATE 5
 
-#define OK_BUTTON 0
-#define HELP_BUTTON 1
+#define OK_BUTTON 6
+#define HELP_BUTTON 7
 
 char replybuffer[255];// this is a large buffer for replies
 
@@ -36,6 +36,8 @@ char gpsdata[120];
 int8_t stat;
 String temp;
 uint8_t type;
+int ok;
+int help;
 
 struct TRACKER_DATA {
   String id;
@@ -48,13 +50,14 @@ struct TRACKER_DATA {
   String cell_sig;
   String batt;
   String trp;
+  String sts;
 };
 TRACKER_DATA postData; 
 
 int state;
 unsigned long loopTimer;
 unsigned long postTimer;
-unsigned long analogReadTimer;
+unsigned long digitalReadTimer;
 
 void setup() {
   while (!Serial);
@@ -65,6 +68,9 @@ void setup() {
   state = INIT_STATE;
   loopTimer = 0;
   postTimer = 0;
+
+  ok = 0;
+  help = 0;
   
   Serial.begin(115200);
   Serial.println(F("FONA basic test"));
@@ -141,6 +147,8 @@ void loop() {
       break;
     case GET_DATA_STATE://*************************************************************************
 //      Serial.println("GET INFO");
+//TEST CODE FOR DIG IN--------------------------------------------
+      Serial.print("data.sts: ");Serial.println(postData.sts);
       for(int i = 0; i < 120; i++) {//init buffer before using each time
         gpsdata[i] = ' ';
       }
@@ -190,9 +198,9 @@ void loop() {
       }else if(millis() >= loopTimer) {
         state = GET_DATA_STATE;
         loopTimer = (millis() + LOOP_TIME);
-      }else if(millis() >= analogReadTimer) {
-        state = READ_ANALOG_STATE;
-        analogReadTimer = (millis() + ANALOG_READ_TIME);
+      }else if(millis() >= digitalReadTimer) {
+        state = READ_DIGITAL_STATE;
+        digitalReadTimer = (millis() + ANALOG_READ_TIME);
       }
       break;
     case POST_STATE://*************************************************************************
@@ -241,11 +249,24 @@ void loop() {
 
       state = WAIT_STATE;
       break;
-    case READ_ANALOG_STATE://*************************************************************************
-//      Serial.println("READ ANALOGS");
-      Serial.print("ANALOG OK = ");Serial.println(analogRead(OK_BUTTON));
-      Serial.print("ANALOG HELP = ");Serial.println(analogRead(HELP_BUTTON));
-      state = WAIT_STATE;
+    case READ_DIGITAL_STATE://*************************************************************************
+//      Serial.println("READ DIGITALS");
+      ok = digitalRead(OK_BUTTON);
+      help = digitalRead(HELP_BUTTON);
+      if(!ok && !help) {
+        postData.sts = "0";
+        state = WAIT_STATE;
+      } else if(ok && !help) {
+        postData.sts = "1";
+        state = POST_STATE;
+      } else if (!ok && help) {
+        postData.sts = "2";
+        state = POST_STATE;
+      } else if (ok && help) {
+        postData.sts = "3";
+        state = POST_STATE;
+      }
+      
       break;
     default://*************************************************************************
       Serial.println("DEFAULT");
@@ -278,6 +299,8 @@ String buildPost(TRACKER_DATA &postData) {//build post
   post += "&trp=";
   post += postData.trp;
   printPostData(postData);
+  post += "&sts=";
+  post += postData.sts;
   Serial.print("Post: ");Serial.println(post);
   return post;
 }
@@ -293,6 +316,7 @@ void printPostData(TRACKER_DATA &post) {
   Serial.print("cSig: ");Serial.println(post.cell_sig);
   Serial.print("Batt: ");Serial.println(post.batt);
   Serial.print("Trp: ");Serial.println(post.trp);
+  Serial.print("Sts: ");Serial.println(post.sts);
 }
 
 void parseGPS(TRACKER_DATA &data, String gps) {
