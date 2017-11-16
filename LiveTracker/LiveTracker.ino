@@ -5,11 +5,12 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-#define TEST_MODE true
-//#define TEST_MODE false
+//#define TEST_MODE true
+#define TEST_MODE false
 #define LOOP_TIME 1000
 #define POST_TIME 16250
 #define ANALOG_READ_TIME 100
+#define DEBOUNCE_DELAY 5000
 #define TRIP_MEM_LOCATION 0
 
 //state machine states
@@ -58,6 +59,7 @@ int state;
 unsigned long loopTimer;
 unsigned long postTimer;
 unsigned long digitalReadTimer;
+unsigned long debounce;
 
 void setup() {
   while (!Serial);
@@ -68,6 +70,8 @@ void setup() {
   state = INIT_STATE;
   loopTimer = 0;
   postTimer = 0;
+  digitalReadTimer = 0;
+  debounce = 0;
 
   ok = 0;
   help = 0;
@@ -208,7 +212,7 @@ void loop() {
       if(stat == 2 || stat == 3) {
         parseGPS(postData, gpsdata);
 
-        Serial.print("Data to POST: ");
+        Serial.println("Data to POST: ");
         temp = buildPost(postData); 
              
         uint16_t statuscode;
@@ -253,18 +257,23 @@ void loop() {
 //      Serial.println("READ DIGITALS");
       ok = digitalRead(OK_BUTTON);
       help = digitalRead(HELP_BUTTON);
-      if(!ok && !help) {
-        postData.sts = "0";
+      if(debounce < millis()) {//limits how often the button can call the post state
+        if(!ok && !help) {
+          postData.sts = "0";
+          state = WAIT_STATE;
+        } else if(ok && !help) {
+          postData.sts = "1";
+          state = POST_STATE;
+        } else if (!ok && help) {
+          postData.sts = "2";
+          state = POST_STATE;
+        } else if (ok && help) {
+          postData.sts = "3";
+          state = POST_STATE;
+        }
+        debounce = millis() + DEBOUNCE_DELAY;
+      } else {
         state = WAIT_STATE;
-      } else if(ok && !help) {
-        postData.sts = "1";
-        state = POST_STATE;
-      } else if (!ok && help) {
-        postData.sts = "2";
-        state = POST_STATE;
-      } else if (ok && help) {
-        postData.sts = "3";
-        state = POST_STATE;
       }
       
       break;
@@ -298,9 +307,9 @@ String buildPost(TRACKER_DATA &postData) {//build post
   post += postData.batt;
   post += "&trp=";
   post += postData.trp;
-  printPostData(postData);
   post += "&sts=";
   post += postData.sts;
+  printPostData(postData);
   Serial.print("Post: ");Serial.println(post);
   return post;
 }
@@ -323,23 +332,23 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
   data.ts = gps.substring(dataStart,dataEnd);
-  Serial.print("Ts: ");Serial.println(data.ts);
+//  Serial.print("Ts: ");Serial.println(data.ts);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.lat = gps.substring(dataStart,dataEnd);
-  Serial.print("Lat: ");Serial.println(data.lat);
+//  Serial.print("Lat: ");Serial.println(data.lat);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.lon = gps.substring(dataStart,dataEnd);
-  Serial.print("Lon: ");Serial.println(data.lon);
+//  Serial.print("Lon: ");Serial.println(data.lon);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.alt = gps.substring(dataStart,dataEnd);
-  Serial.print("Alt: ");Serial.println(data.alt);
+//  Serial.print("Alt: ");Serial.println(data.alt);
   dataStart = dataEnd+1;
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
-  Serial.print("Spd: ");Serial.println(data.spd);
+//  Serial.print("Spd: ");Serial.println(data.spd);
 }
 
 void flushSerial() {
