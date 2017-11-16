@@ -258,10 +258,7 @@ void loop() {
       ok = digitalRead(OK_BUTTON);
       help = digitalRead(HELP_BUTTON);
       if(debounce < millis()) {//limits how often the button can call the post state
-        if(!ok && !help) {
-          postData.sts = "0";
-          state = WAIT_STATE;
-        } else if(ok && !help) {
+        if(ok && !help) {
           postData.sts = "1";
           state = POST_STATE;
         } else if (!ok && help) {
@@ -273,9 +270,9 @@ void loop() {
         }
         debounce = millis() + DEBOUNCE_DELAY;
       } else {
+        postData.sts = "0";
         state = WAIT_STATE;
-      }
-      
+      }      
       break;
     default://*************************************************************************
       Serial.println("DEFAULT");
