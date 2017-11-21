@@ -5,11 +5,11 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-//#define TEST_MODE true
-#define TEST_MODE false
+#define TEST_MODE true
+//#define TEST_MODE false
 #define LOOP_TIME 1000
 #define POST_TIME 16250
-#define ANALOG_READ_TIME 100
+#define DIGITAL_READ_TIME 100
 #define DEBOUNCE_DELAY 5000
 #define TRIP_MEM_LOCATION 0
 
@@ -20,11 +20,10 @@
 #define WAIT_STATE 3
 #define POST_STATE 4
 #define READ_DIGITAL_STATE 5
+#define CHECK_SIGNAL 6
 
 #define OK_BUTTON 6
 #define HELP_BUTTON 7
-
-char replybuffer[255];// this is a large buffer for replies
 
 #include <SoftwareSerial.h>
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
@@ -33,25 +32,28 @@ SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
-char gpsdata[120];
+char gpsData[120];
+char gsmData[255];// this is a large buffer for replies
 int8_t stat;
 String temp;
 uint8_t type;
 int ok;
 int help;
+boolean gsmLocation;
 
 struct TRACKER_DATA {
-  String id;
+  String id;//imei number (like MAC)
   String ts;//time stamp
   String lat;
   String lon;
-  String alt;
+  String alt;//meters
   String spd;
-  String gps_sig;
-  String cell_sig;
-  String batt;
-  String trp;
-  String sts;
+  String gps_sig;//course 0-3 value
+  String cell_sig;//not currently used
+  String batt;//battery % charge
+  String trp;//trip number
+  String sts;//status
+  String satCount;//not used in POST
 };
 TRACKER_DATA postData; 
 
@@ -75,6 +77,7 @@ void setup() {
 
   ok = 0;
   help = 0;
+  gsmLocation = false;
   
   Serial.begin(115200);
   Serial.println(F("FONA basic test"));
@@ -152,46 +155,44 @@ void loop() {
     case GET_DATA_STATE://*************************************************************************
 //      Serial.println("GET INFO");
 //TEST CODE FOR DIG IN--------------------------------------------
-      Serial.print("data.sts: ");Serial.println(postData.sts);
+//      Serial.print("data.sts: ");Serial.println(postData.sts);
       for(int i = 0; i < 120; i++) {//init buffer before using each time
-        gpsdata[i] = ' ';
+        gpsData[i] = ' ';
       }
-      fona.getGPS(0, gpsdata, 120);
+
+      fona.getGPS(0, gpsData, 120);//get GPS info
       stat = fona.GPSstatus();
       postData.gps_sig = stat;
-//      switch(stat) {
-//        case 0:
-//          Serial.println(F("GPS off"));
-//          break;
-//        case 1:
-//          Serial.println(F("No fix"));
-//          break;
-//        case 2:
-//          Serial.println(F("2D fix"));
-//          break;
-//        case 3:
-//          Serial.println(F("3D fix"));
-//          break;
-//        default:
-//          Serial.println(F("Failed to query"));
-//          break;
-//      }
+
       uint16_t vbat;
       fona.getBattPercent(&vbat);
       postData.batt = vbat; 
 
 //       check for GSMLOC (requires GPRS)*******start******
-//        uint16_t returncode;  
-//        if (!fona.getGSMLoc(&returncode, replybuffer, 250))
-//          Serial.println(F("GPS Failed!"));
-//        if (returncode == 0) {
-//          Serial.println(replybuffer);
-//          //parse GPS data
-//        } else {
-//          Serial.print(F("Fail code #")); Serial.println(returncode);
-//        }
+        uint16_t returncode;  
+        if (!fona.getGSMLoc(&returncode, gsmData, 250))
+          Serial.println(F("GPS Failed!"));
+        if (returncode == 0) {
+          Serial.print("GSM DATA: ");
+          Serial.print(gsmData);
+          Serial.println("**GSM DATA END**");
+          //parse GPS data
+        } else {
+          Serial.print(F("Fail code #")); Serial.println(returncode);
+        }
 //     // check for GSMLOC (requires GPRS)*******end******
-
+      state = CHECK_SIGNAL;
+      break;
+    case CHECK_SIGNAL://*************************************************************************
+//      if(stat != "3" && (postData.satCount.toInt()) < 4) {
+//        gsmLocation = true;
+//        Serial.println("USE GSM LOCATION");
+//      } else {
+//        gsmLocation = false;
+//        Serial.println("USE GPS LOCATION");
+//      }
+      Serial.print("stat: ");Serial.println(stat);
+      Serial.print("statCount: ");Serial.println(postData.satCount);
       state = WAIT_STATE;
       break;
     case WAIT_STATE://*************************************************************************
@@ -204,13 +205,16 @@ void loop() {
         loopTimer = (millis() + LOOP_TIME);
       }else if(millis() >= digitalReadTimer) {
         state = READ_DIGITAL_STATE;
-        digitalReadTimer = (millis() + ANALOG_READ_TIME);
+        digitalReadTimer = (millis() + DIGITAL_READ_TIME);
       }
       break;
     case POST_STATE://*************************************************************************
 //      Serial.println("POST SOME DATA NOW");
-      if(stat == 2 || stat == 3) {
-        parseGPS(postData, gpsdata);
+      if(stat == 2 || stat == 3) {//if you have a 2d or 3d GPS fix
+        parseGPS(postData, gpsData);
+        if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
+          parseGSM(postData, gsmData);
+        }
 
         Serial.println("Data to POST: ");
         temp = buildPost(postData); 
@@ -323,6 +327,7 @@ void printPostData(TRACKER_DATA &post) {
   Serial.print("Batt: ");Serial.println(post.batt);
   Serial.print("Trp: ");Serial.println(post.trp);
   Serial.print("Sts: ");Serial.println(post.sts);
+  Serial.print("Sat: ");Serial.println(post.satCount);
 }
 
 void parseGPS(TRACKER_DATA &data, String gps) {
@@ -346,6 +351,27 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
 //  Serial.print("Spd: ");Serial.println(data.spd);
+  dataStart = gps.indexOf(',',dataEnd+14);
+  dataEnd = gps.indexOf(',',dataEnd+15);
+  data.satCount = gps.substring(dataStart,dataEnd);
+  Serial.print("start: ");Serial.println(dataStart);
+  Serial.print("end: ");Serial.println(dataEnd);
+  Serial.print("SatCount: ");Serial.println(data.satCount);
+}
+
+void parseGSM(TRACKER_DATA &data, String gsm) {
+//  -121.335625,44.042885,2017/11/21,19:09:08
+  int dataStart = 0;
+  int dataEnd = gsm.indexOf(',',dataStart+1);
+  data.lat = gsm.substring(dataStart,dataEnd);
+  Serial.print("GMS Lat: ");Serial.println(data.lat);
+  dataStart = dataEnd+1;
+  dataEnd = gsm.indexOf(',',dataEnd+1);
+  data.lon = gsm.substring(dataStart,dataEnd);
+  Serial.print("GSM Lon: ");Serial.println(data.lon);
+  dataStart = dataEnd+1;
+  data.ts = gsm.substring(dataStart,dataEnd);
+  Serial.print("GSM Ts: ");Serial.println(data.ts);
 }
 
 void flushSerial() {
@@ -387,3 +413,22 @@ uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout) {
   buff[buffidx] = 0;  // null term
   return buffidx;
 }
+//      switch(stat) {//saving to document gps status
+//        case 0:
+//          Serial.println(F("GPS off"));
+//          break;
+//        case 1:
+//          Serial.println(F("No fix"));
+//          break;
+//        case 2:
+//          Serial.println(F("2D fix"));
+//          break;
+//        case 3:
+//          Serial.println(F("3D fix"));
+//          break;
+//        default:
+//          Serial.println(F("Failed to query"));
+//          break;
+//      }
+
+
