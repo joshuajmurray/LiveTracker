@@ -7,9 +7,10 @@
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
 #define TEST_MODE true
 //#define TEST_MODE false
-#define LOOP_TIME 1000
+#define LOOP_TIME 5000
 #define POST_TIME 16250
 #define DIGITAL_READ_TIME 100
+#define OK_TIME 10000
 #define DEBOUNCE_DELAY 5000
 #define TRIP_MEM_LOCATION 0
 
@@ -24,6 +25,8 @@
 
 #define OK_BUTTON 6
 #define HELP_BUTTON 7
+#define OK_LED 8
+#define HELP_LED 9
 
 #include <SoftwareSerial.h>
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
@@ -61,6 +64,7 @@ int state;
 unsigned long loopTimer;
 unsigned long postTimer;
 unsigned long digitalReadTimer;
+unsigned long okTimer;
 unsigned long debounce;
 
 void setup() {
@@ -68,11 +72,16 @@ void setup() {
 
   pinMode(OK_BUTTON, INPUT);
   pinMode(HELP_BUTTON, INPUT);
-  
+  pinMode(OK_LED, OUTPUT);
+  pinMode(HELP_LED, OUTPUT);
+  digitalWrite(OK_LED, HIGH);
+  digitalWrite(HELP_LED, HIGH);
+
   state = INIT_STATE;
   loopTimer = 0;
   postTimer = 0;
   digitalReadTimer = 0;
+  okTimer = 0;
   debounce = 0;
 
   ok = 0;
@@ -137,6 +146,8 @@ void setup() {
   byte val = (byte)EEPROM.read(TRIP_MEM_LOCATION);
   postData.trp = val++; //increment the trip on powerup
   EEPROM.write(TRIP_MEM_LOCATION, val);//write back to eeprom (it's only 1 byte!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+  digitalWrite(OK_LED, LOW);
+  digitalWrite(HELP_LED, LOW);
 }
 
 void loop() {
@@ -154,8 +165,6 @@ void loop() {
       break;
     case GET_DATA_STATE://*************************************************************************
 //      Serial.println("GET INFO");
-//TEST CODE FOR DIG IN--------------------------------------------
-//      Serial.print("data.sts: ");Serial.println(postData.sts);
       for(int i = 0; i < 120; i++) {//init buffer before using each time
         gpsData[i] = ' ';
       }
@@ -185,28 +194,36 @@ void loop() {
       break;
     case CHECK_SIGNAL://*************************************************************************
 //      if(stat != "3" && (postData.satCount.toInt()) < 4) {
-//        gsmLocation = true;
+        gsmLocation = true;
 //        Serial.println("USE GSM LOCATION");
 //      } else {
 //        gsmLocation = false;
 //        Serial.println("USE GPS LOCATION");
 //      }
       Serial.print("stat: ");Serial.println(stat);
-      Serial.print("statCount: ");Serial.println(postData.satCount);
+      Serial.print("satCount: ");Serial.println(postData.satCount);
       state = WAIT_STATE;
       break;
     case WAIT_STATE://*************************************************************************
 //      Serial.println("WAIT  ");
       if(millis() >= postTimer) {
         state = POST_STATE;
+//      Serial.println("POST");
         postTimer = (millis() + POST_TIME);
       }else if(millis() >= loopTimer) {
+//      Serial.println("LOOP");
         state = GET_DATA_STATE;
         loopTimer = (millis() + LOOP_TIME);
       }else if(millis() >= digitalReadTimer) {
+//      Serial.println("READ DIG");
         state = READ_DIGITAL_STATE;
         digitalReadTimer = (millis() + DIGITAL_READ_TIME);
       }
+      
+      if(millis() >= okTimer){
+        digitalWrite(OK_LED, LOW);
+      }
+      
       break;
     case POST_STATE://*************************************************************************
 //      Serial.println("POST SOME DATA NOW");
@@ -264,9 +281,12 @@ void loop() {
       if(debounce < millis()) {//limits how often the button can call the post state
         if(ok && !help) {
           postData.sts = "1";
+          digitalWrite(OK_LED, HIGH);
+          okTimer = (millis() + OK_TIME);
           state = POST_STATE;
         } else if (!ok && help) {
           postData.sts = "2";
+          digitalWrite(HELP_LED, HIGH);//latch red LED on, nowhere in code will this turn off again.
           state = POST_STATE;
         } else if (ok && help) {
           postData.sts = "3";
