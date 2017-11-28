@@ -371,8 +371,8 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
 //  Serial.print("Spd: ");Serial.println(data.spd);
-  dataStart = gps.indexOf(',',dataEnd+14);
-  dataEnd = gps.indexOf(',',dataEnd+15);
+  dataStart = gps.indexOf(',',0);
+  dataEnd = gps.indexOf(',',2);
   data.satCount = gps.substring(dataStart,dataEnd);
   Serial.print("start: ");Serial.println(dataStart);
   Serial.print("end: ");Serial.println(dataEnd);
@@ -381,19 +381,46 @@ void parseGPS(TRACKER_DATA &data, String gps) {
 
 void parseGSM(TRACKER_DATA &data, String gsm) {
 //  -121.335625,44.042885,2017/11/21,19:09:08
+  Serial.print("GSM in: ");Serial.println(gsm);
   int dataStart = 0;
   int dataEnd = gsm.indexOf(',',dataStart+1);
   data.lat = gsm.substring(dataStart,dataEnd);
-  Serial.print("GMS Lat: ");Serial.println(data.lat);
+  Serial.print("GSM Lat: ");Serial.println(data.lat);
   dataStart = dataEnd+1;
   dataEnd = gsm.indexOf(',',dataEnd+1);
   data.lon = gsm.substring(dataStart,dataEnd);
   Serial.print("GSM Lon: ");Serial.println(data.lon);
-  dataStart = dataEnd+1;
-  data.ts = gsm.substring(dataStart,dataEnd);
+  data.ts = gsm.substring(dataEnd+1);
+  parseGSMTime(data);
   Serial.print("GSM Ts: ");Serial.println(data.ts);
 }
 
+void parseGSMTime(TRACKER_DATA &data) {
+  for(int i = 0; i < data.ts.length(); i++) {
+    int location = data.ts.indexOf('/');
+    if(location != -1){
+      data.ts.remove(location,1);
+    } else {
+      break;
+    }
+  }
+  for(int i = 0; i < data.ts.length(); i++) {
+    int location = data.ts.indexOf(',');
+    if(location != -1){
+      data.ts.remove(location,1);
+    } else {
+      break;
+    }
+  }
+  for(int i = 0; i < data.ts.length(); i++) {
+    int location = data.ts.indexOf(':');
+    if(location != -1){
+      data.ts.remove(location,1);
+    } else {
+      break;
+    }
+  }
+}
 void flushSerial() {
   while (Serial.available())
     Serial.read();
