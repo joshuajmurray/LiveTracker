@@ -351,49 +351,38 @@ void printPostData(TRACKER_DATA &post) {
   Serial.print("Sat: ");Serial.println(post.satCount);
 }
 
-void parseGPS(TRACKER_DATA &data, char gpsChar[120]) {
+void parseGPS(TRACKER_DATA &data, char* gpsChar) {
   Serial.print("GPS in: ");Serial.println(gpsChar);
-  String gps = String(gpsChar);
-  Serial.print("GPS string: ");Serial.println(gps);
-//  for(int i = 0; i < sizeof(gpsChar);i++) {
-//    gps[i] = gpsChar[i];
-//  }
-  int dataStart = (gps.indexOf(',',3)+1);
-  int dataEnd = gps.indexOf(',',dataStart+1);
-  data.ts = gps.substring(dataStart,dataEnd);
-//  Serial.print("Ts: ");Serial.println(data.ts);
-  dataStart = dataEnd+1;
-  dataEnd = gps.indexOf(',',dataEnd+1);
-  data.lat = gps.substring(dataStart,dataEnd);
-//  Serial.print("Lat: ");Serial.println(data.lat);
-  dataStart = dataEnd+1;
-  dataEnd = gps.indexOf(',',dataEnd+1);
-  data.lon = gps.substring(dataStart,dataEnd);
-//  Serial.print("Lon: ");Serial.println(data.lon);
-  dataStart = dataEnd+1;
-  dataEnd = gps.indexOf(',',dataEnd+1);
-  data.alt = gps.substring(dataStart,dataEnd);
-//  Serial.print("Alt: ");Serial.println(data.alt);
-  dataStart = dataEnd+1;
-  dataEnd = gps.indexOf(',',dataEnd+1);
-  data.spd = gps.substring(dataStart,dataEnd);
-//  Serial.print("Spd: ");Serial.println(data.spd);
-  dataStart = 0;
-  for(int i = 0;i < gps.length();i++) {
-    dataStart = (gps.indexOf(',', dataStart) + 1);
-    Serial.print("dataStart ");Serial.println(dataStart);
-    dataEnd = gps.indexOf(',', dataStart);
-    Serial.print("dataEnd ");Serial.println(dataEnd);
-    Serial.print("data at index: ");Serial.println(gps.substring(dataStart,dataEnd));
-    if(i == 13){
+  char* temp;
+  temp = strtok(gpsChar,",");
+  int loc = 1;
+  while(temp != NULL) {
+    Serial.println(temp);
+    switch(loc) {
+      case 3://*************************************************************************
+        data.ts = temp;
+      break;
+      case 4://*************************************************************************
+        data.lat = temp;
+      break;
+      case 5://*************************************************************************
+        data.lon = temp;
+      break;
+      case 6://*************************************************************************
+        data.alt = temp;
+      break;
+      case 7://*************************************************************************
+        data.spd = temp;
+      break;
+      case 13://*************************************************************************
+        data.satCount = temp;
+      break;
+    default:
       break;
     }
+    temp = strtok(NULL,",");
+    loc++;
   }
-//  dataEnd = gps.indexOf(',', dataStart);
-  data.satCount = gps.substring(dataStart,dataEnd);
-  Serial.print("start: ");Serial.println(dataStart);
-  Serial.print("end: ");Serial.println(dataEnd);
-  Serial.print("SatCount: ");Serial.println(data.satCount);
 }
 
 void parseGSM(TRACKER_DATA &data, String gsm) {
