@@ -371,8 +371,19 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
 //  Serial.print("Spd: ");Serial.println(data.spd);
-  dataStart = gps.indexOf(',',0);
-  dataEnd = gps.indexOf(',',2);
+  Serial.println(gps);
+  dataStart = 0;
+  for(int i = 0;i < gps.length();i++) {
+    dataStart = (gps.indexOf(',', dataStart) + 1);
+    Serial.print("dataStart ");Serial.println(dataStart);
+    dataEnd = gps.indexOf(',', dataStart);
+    Serial.print("dataEnd ");Serial.println(dataEnd);
+    Serial.print("data at index: ");Serial.println(gps.substring(dataStart,dataEnd));
+    if(i == 13){
+      break;
+    }
+  }
+//  dataEnd = gps.indexOf(',', dataStart);
   data.satCount = gps.substring(dataStart,dataEnd);
   Serial.print("start: ");Serial.println(dataStart);
   Serial.print("end: ");Serial.println(dataEnd);
