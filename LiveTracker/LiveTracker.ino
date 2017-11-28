@@ -166,7 +166,7 @@ void loop() {
     case GET_DATA_STATE://*************************************************************************
 //      Serial.println("GET INFO");
       for(int i = 0; i < 120; i++) {//init buffer before using each time
-        gpsData[i] = ' ';
+        gpsData[i] = '\0';
       }
 
       fona.getGPS(0, gpsData, 120);//get GPS info
@@ -228,6 +228,7 @@ void loop() {
     case POST_STATE://*************************************************************************
 //      Serial.println("POST SOME DATA NOW");
       if(stat == 2 || stat == 3) {//if you have a 2d or 3d GPS fix
+        Serial.print("GPSDATA: ");Serial.println(gpsData);
         parseGPS(postData, gpsData);
         if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
           parseGSM(postData, gsmData);
@@ -350,7 +351,13 @@ void printPostData(TRACKER_DATA &post) {
   Serial.print("Sat: ");Serial.println(post.satCount);
 }
 
-void parseGPS(TRACKER_DATA &data, String gps) {
+void parseGPS(TRACKER_DATA &data, char gpsChar[120]) {
+  Serial.print("GPS in: ");Serial.println(gpsChar);
+  String gps = String(gpsChar);
+  Serial.print("GPS string: ");Serial.println(gps);
+//  for(int i = 0; i < sizeof(gpsChar);i++) {
+//    gps[i] = gpsChar[i];
+//  }
   int dataStart = (gps.indexOf(',',3)+1);
   int dataEnd = gps.indexOf(',',dataStart+1);
   data.ts = gps.substring(dataStart,dataEnd);
@@ -371,7 +378,6 @@ void parseGPS(TRACKER_DATA &data, String gps) {
   dataEnd = gps.indexOf(',',dataEnd+1);
   data.spd = gps.substring(dataStart,dataEnd);
 //  Serial.print("Spd: ");Serial.println(data.spd);
-  Serial.println(gps);
   dataStart = 0;
   for(int i = 0;i < gps.length();i++) {
     dataStart = (gps.indexOf(',', dataStart) + 1);
@@ -392,18 +398,18 @@ void parseGPS(TRACKER_DATA &data, String gps) {
 
 void parseGSM(TRACKER_DATA &data, String gsm) {
 //  -121.335625,44.042885,2017/11/21,19:09:08
-  Serial.print("GSM in: ");Serial.println(gsm);
+//  Serial.print("GSM in: ");Serial.println(gsm);
   int dataStart = 0;
   int dataEnd = gsm.indexOf(',',dataStart+1);
   data.lat = gsm.substring(dataStart,dataEnd);
-  Serial.print("GSM Lat: ");Serial.println(data.lat);
+//  Serial.print("GSM Lat: ");Serial.println(data.lat);
   dataStart = dataEnd+1;
   dataEnd = gsm.indexOf(',',dataEnd+1);
   data.lon = gsm.substring(dataStart,dataEnd);
-  Serial.print("GSM Lon: ");Serial.println(data.lon);
+//  Serial.print("GSM Lon: ");Serial.println(data.lon);
   data.ts = gsm.substring(dataEnd+1);
   parseGSMTime(data);
-  Serial.print("GSM Ts: ");Serial.println(data.ts);
+//  Serial.print("GSM Ts: ");Serial.println(data.ts);
 }
 
 void parseGSMTime(TRACKER_DATA &data) {
