@@ -28,6 +28,12 @@
 #define OK_LED 8
 #define HELP_LED 9
 
+#define GPS_OFF 0
+#define GPS_NO_FIX 1
+#define GPS_2D_FIX 2
+#define GPS_3D_FIX 3
+#define GPS_MIN_SAT_COUNT 4
+
 #include <SoftwareSerial.h>
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
@@ -37,6 +43,7 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 char gpsData[120];
 char gsmData[50];// this is a large buffer for replies
+char tempBuff[180];//this is as small as we can make this.. 
 int8_t stat;
 uint8_t type;
 int ok;
@@ -44,18 +51,18 @@ int help;
 boolean gsmLocation;
 
 struct TRACKER_DATA {
-  char* id;//imei number (like MAC)
+  char id[16] = "";//imei number (like MAC)
   char* ts;//time stamp
   char* lat;
   char* lon;
   char* alt;//meters
   char* spd;
-  char* gps_sig;//course 0-3 value
-  char* cell_sig;//not currently used
-  char* batt;//battery % charge
-  char* trp;//trip number
-  char* sts;//status
-  char* satCount;//not used in POST
+  byte gps_sig;//course 0-3 value
+  byte cell_sig;//not currently used
+  unsigned int batt;//battery % charge
+  byte trp;//trip number
+  byte sts;//status
+  byte satCount;//not used in POST
 };
 TRACKER_DATA postData; 
 
@@ -91,18 +98,17 @@ void setup() {
   Serial.println(F("FONA basic test"));
   Serial.println(F("Initializing....(May take 3 seconds)"));
 
-  postData.id = "0";
   postData.ts = "0";
   postData.lat = "0";
   postData.lon = "0";
   postData.alt = "0";
   postData.spd = "0";
-  postData.gps_sig = "0";
-  postData.cell_sig = "0";
-  postData.batt = "0";
-  postData.trp = "0";
-  postData.sts = "0";
-  postData.satCount = "0";
+  postData.gps_sig = 0;
+  postData.cell_sig = 0;
+  postData.batt = 0;
+  postData.trp = 0;
+  postData.sts = 0;
+  postData.satCount = 0;
 
   fonaSerial->begin(4800);
   if (! fona.begin(*fonaSerial)) {
@@ -120,13 +126,12 @@ void setup() {
       Serial.println(F("???")); break;
   }
   
-  char imei[16] = {0}; // MUST use a 16 character buffer for IMEI!  // Print module IMEI number.
-  uint8_t imeiLen = fona.getIMEI(imei);
+  uint8_t imeiLen = fona.getIMEI(postData.id);
   if (imeiLen > 0) {
-    Serial.print("Module IMEI: "); Serial.println(imei);
+    Serial.print(F("Module IMEI: ")); Serial.println(postData.id);
   }
 
-  Serial.println(F("-------------------------------------"));
+//  Serial.println(F("-------------------------------------"));
 
   // read the battery voltage and percentage
   uint16_t vbat;
@@ -144,7 +149,6 @@ void setup() {
   }
   while(!fona.enableGPRS(true));//enables post ability and cell based location services
   while(!fona.enableGPS(true));//enable gps module
-  postData.id = imei;
   byte val = (byte)EEPROM.read(TRIP_MEM_LOCATION);
   postData.trp = val++; //increment the trip on powerup
   EEPROM.write(TRIP_MEM_LOCATION, val);//write back to eeprom (it's only 1 byte!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
@@ -156,25 +160,27 @@ void loop() {
 
   switch(state) {
     case INIT_STATE://*************************************************************************
-      Serial.println("INIT STUFF");
+      Serial.println(F("INIT STUFF"));
 //      init stuff here
       state = WAIT_STATE;
       break;
     case ERROR_STATE://*************************************************************************
-      Serial.println("ERROR");
+      Serial.println(F("ERROR"));
 
       state = INIT_STATE;
       break;
     case GET_DATA_STATE://*************************************************************************
-//      Serial.println("GET INFO");
+//      Serial.println(F("GET INFO"));
       for(int i = 0; i < 120; i++) {//init buffer before using each time
         gpsData[i] = '\0';
       }
 
       fona.getGPS(0, gpsData, 120);//get GPS info
       stat = fona.GPSstatus();
+      Serial.print(F("stat: "));Serial.println(stat);
       postData.gps_sig = stat;
-
+      Serial.print(F("gps_sig: "));Serial.println(postData.gps_sig);
+      
       uint16_t vbat;
       fona.getBattPercent(&vbat);
       postData.batt = vbat; 
@@ -184,10 +190,10 @@ void loop() {
         if (!fona.getGSMLoc(&returncode, gsmData, 250))
           Serial.println(F("GPS Failed!"));
         if (returncode == 0) {
-//          Serial.print("GSM DATA: ");
+//          Serial.print(F("GSM DATA: "));
 //          Serial.print(gsmData);
-//          Serial.print("size: ");Serial.print(sizeof(gsmData));
-//          Serial.println("**GSM DATA END**");
+//          Serial.print(F("size: "));Serial.print(sizeof(gsmData));
+//          Serial.println(F("**GSM DATA END**"));
           //parse GPS data
         } else {
           Serial.print(F("Fail code #")); Serial.println(returncode);
@@ -198,13 +204,13 @@ void loop() {
     case CHECK_SIGNAL://*************************************************************************
       if(stat != "3" && (postData.satCount) < 4) {
         gsmLocation = true;
-        Serial.println("USE GSM LOCATION");
+        Serial.println(F("USE GSM LOCATION"));
       } else {
         gsmLocation = false;
-        Serial.println("USE GPS LOCATION");
+        Serial.println(F("USE GPS LOCATION"));
       }
-      Serial.print("stat: ");Serial.println(stat);
-      Serial.print("satCount: ");Serial.println(postData.satCount);
+      Serial.print(F("stat: "));Serial.println(stat);
+      Serial.print(F("satCount: "));Serial.println(postData.satCount);
       state = WAIT_STATE;
       break;
     case WAIT_STATE://*************************************************************************
@@ -231,26 +237,25 @@ void loop() {
     case POST_STATE://*************************************************************************
 //      Serial.println("POST SOME DATA NOW");
       if(stat == 2 || stat == 3) {//if you have a 2d or 3d GPS fix
-        Serial.print("GPSDATA: ");Serial.println(gpsData);
-        parseGPS(postData, gpsData);
-        if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
-          parseGSM(postData, gsmData);
-        }
+        Serial.print(F("GPSDATA: "));Serial.println(gpsData);
+        parseGPS(gpsData);
+//        if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
+//          parseGSM(gsmData);
+//        }
 
-        Serial.println("Data to POST: ");
-//        temp = buildPost(postData); 
+        Serial.println(F("Data to POST: "));
+        buildPost(); 
              
         uint16_t statuscode;
         int16_t length;
-//        char url[160];
-//        temp.toCharArray(url,temp.length()+1);
-        char data[1] = {' '};//need to look into the adafruit library but this works for now..     
+//        char data[1] = {' '};//need to look into the adafruit library but this works for now..     
+        char data[1] = " ";//need to look into the adafruit library but this works for now..     
         flushSerial();
 
         if(!TEST_MODE) {        
           Serial.println(F("****"));
-          if (!fona.HTTP_POST_start(buildPost(postData), F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
-            Serial.println("Failed!");
+          if (!fona.HTTP_POST_start(tempBuff, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
+            Serial.println(F("Failed!"));
           }else {
             while (length > 0) {
               while (fona.available()) {
@@ -284,112 +289,81 @@ void loop() {
       help = digitalRead(HELP_BUTTON);
       if(debounce < millis()) {//limits how often the button can call the post state
         if(ok && !help) {
-          postData.sts = "1";
+          postData.sts = 1;
           digitalWrite(OK_LED, HIGH);
           okTimer = (millis() + OK_TIME);
           state = POST_STATE;
         } else if (!ok && help) {
-          postData.sts = "2";
+          postData.sts = 2;
           digitalWrite(HELP_LED, HIGH);//latch red LED on, nowhere in code will this turn off again.
           state = POST_STATE;
         } else if (ok && help) {
-          postData.sts = "3";
+          postData.sts = 3;
           state = POST_STATE;
         }
         debounce = millis() + DEBOUNCE_DELAY;
       } else {
-        postData.sts = "0";
+        postData.sts = 0;
         state = WAIT_STATE;
       }      
       break;
     default://*************************************************************************
-      Serial.println("DEFAULT");
+      Serial.println(F("DEFAULT"));
       state = ERROR_STATE;
       break;
   }
 }
 
-char* buildPost(TRACKER_DATA &postData) {//build post
-//  String post;
-  char post[160];
-//  strcat(post, POST_URL);
-//  post.concat(POST_URL);
-//  post.concat("id=");
-//  strcat(post, "id=");
-//  post.concat(postData.id);
-//  Serial.print("Postid: ");Serial.println(postData.id);
-//  post.concat("&ts=");
-//  post.concat(postData.ts);
-//  post.concat("&lat=");
-//  post.concat(postData.lat);
-//  post.concat("&lon=");
-//  post.concat(postData.lon);
-//  Serial.print("Post: ");Serial.println(post);
-//  Serial.print("Post lon: ");Serial.println(postData.lon);
-//  post.concat("&alt=");
-//  post.concat(postData.alt);
-//  post.concat("&spd=");
-//  post.concat(postData.spd);
-//  post.concat("&gps_sig=");
-//  post.concat(postData.gps_sig);
-//  Serial.print("Post: ");Serial.println(post);
-//  Serial.print("Post gps sig: ");Serial.println(postData.gps_sig);
-//  post.concat("&cell_sig=");
-//  post.concat(postData.cell_sig);
-//  post.concat("&batt=");
-//  post.concat(postData.batt);
-//  Serial.print("Post: ");Serial.println(post);
-//  Serial.print("Post batt: ");Serial.println(postData.batt);
-//  post.concat("&trp=");
-//  post.concat(postData.trp);
-//  post.concat("&sts=");
-//  post.concat(postData.sts);
-  sprintf(post, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", POST_URL, "id=", postData.id, "&ts=", postData.ts, "&lat=", postData.lat, "&lon=", postData.lon,"&alt=",postData.alt,"&spd=",postData.spd,"&gps_sig=",postData.gps_sig,"&cell_sig=",postData.cell_sig,"&batt=",postData.batt,"&trp=",postData.trp,"&sts=",postData.sts);
-//  printPostData(postData);
-//  Serial.print("Post: ");Serial.println(post);
-  return post;
+void buildPost() {//build post
+  Serial.println(F("build post"));
+  sprintf(tempBuff, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%d%s%d%s%d%s%d%s%d", POST_URL, "id=",
+  postData.id, "&ts=", postData.ts, "&lat=", postData.lat, "&lon=", postData.lon,"&alt=",
+  postData.alt,"&spd=",postData.spd,"&gps_sig=",postData.gps_sig,"&cell_sig=",
+  postData.cell_sig,"&batt=",postData.batt,"&trp=",postData.trp,"&sts=",postData.sts);
+  printPostData();
+  Serial.print(F("Post: "));Serial.println(tempBuff);
 }
 
-void printPostData(TRACKER_DATA &post) {
-  Serial.print("ID: ");Serial.println(post.id);
-  Serial.print("TS: ");Serial.println(post.ts);
-  Serial.print("Lat: ");Serial.println(post.lat);
-  Serial.print("Lon: ");Serial.println(post.lon);
-  Serial.print("Alt: ");Serial.println(post.alt);
-  Serial.print("Spd: ");Serial.println(post.spd);
-  Serial.print("gSig: ");Serial.println(post.gps_sig);
-  Serial.print("cSig: ");Serial.println(post.cell_sig);
-  Serial.print("Batt: ");Serial.println(post.batt);
-  Serial.print("Trp: ");Serial.println(post.trp);
-  Serial.print("Sts: ");Serial.println(post.sts);
-  Serial.print("Sat: ");Serial.println(post.satCount);
+void printPostData() {
+  Serial.print(F("ID: "));Serial.println(postData.id);
+  Serial.print(F("TS: "));Serial.println(postData.ts);
+  Serial.print(F("Lat: "));Serial.println(postData.lat);
+  Serial.print(F("Lon: "));Serial.println(postData.lon);
+  Serial.print(F("Alt: "));Serial.println(postData.alt);
+  Serial.print(F("Spd: "));Serial.println(postData.spd);
+  Serial.print(F("gSig: "));Serial.println(postData.gps_sig);
+  Serial.print(F("cSig: "));Serial.println(postData.cell_sig);
+  Serial.print(F("Batt: "));Serial.println(postData.batt);
+  Serial.print(F("Trp: "));Serial.println(postData.trp);
+  Serial.print(F("Sts: "));Serial.println(postData.sts);
+  Serial.print(F("Sat: "));Serial.println(postData.satCount);
 }
 
-void parseGPS(TRACKER_DATA &data, char* gpsChar) {
-  Serial.print("GPS in: ");Serial.println(gpsChar);
+void parseGPS(char* gpsChar) {
+  Serial.print(F("GPS in: "));Serial.println(gpsChar);
   char* temp;
   temp = strtok(gpsChar,",");
   int loc = 1;
   while(temp != NULL) {
-//    Serial.println(temp);
+    Serial.println(temp);
     switch(loc) {
       case 3:
-        data.ts = temp;
+        postData.ts = temp;
       break;
       case 4:
-        data.lat = temp;
+        postData.lat = temp;
       break;
       case 5:
-        data.lon = temp;
+        postData.lon = temp;
       break;
       case 6:
-        data.alt = temp;
+        postData.alt = temp;
       break;
       case 7:
-        data.spd = temp;
+        postData.spd = temp;
       break;
       case 13:
-        data.satCount = temp;
+        postData.satCount = atoi(temp);
       break;
     default:
       break;
@@ -397,47 +371,58 @@ void parseGPS(TRACKER_DATA &data, char* gpsChar) {
     temp = strtok(NULL,",");
     loc++;
   }
+  printPostData();
 }
 
-void parseGSM(TRACKER_DATA &data, char* gsmChar) {
+void parseGSM(char* gsmChar) {
   char* temp;
+  char* pre;
+  char* post;
   temp = strtok(gsmChar,",");
+  Serial.print(F("gsmChar: "));Serial.println(temp);
   int loc = 1;
   while(temp != NULL) {
+    Serial.println(temp);
     switch(loc) {
       case 1:
-        data.lat = temp;
+        postData.lat = temp;
       break;
       case 2:
-        data.lon = temp;
+        postData.lon = temp;
       break;
       case 3:
-        data.ts = temp;
+        pre = temp;
       break;
+      case 4:
+        post = temp;
     default:
       break;
     }
     temp = strtok(NULL,",");
     loc++;
   }
-  parseGSMTime(data);
+  strcpy(postData.ts,pre);
+  strcat(postData.ts,post);
+  parseGSMTime();
 }
 
-void parseGSMTime(TRACKER_DATA &data) {
+void parseGSMTime() {
+//2017/12/01,00:23:43
+  Serial.print(F("GSM pre-mod ts: "));Serial.println(postData.ts);
   char* temp;
-  temp = strtok(data.ts,'/');
-  while(temp != NULL) {
-    temp = strtok(NULL,'/');    
+  char* temp2;
+
+  temp = strtok(postData.ts,"/:");
+  strcpy(temp2, temp);
+  for(int i = 0; i < 5; i++) {
+    Serial.println(temp);
+    temp = strtok(NULL,"/:");
+    strcat(temp2, temp);
   }
-  temp = strtok(data.ts,',');
-  while(temp != NULL) {
-    temp = strtok(NULL,',');    
-  }
-  temp = strtok(data.ts,':');
-  while(temp != NULL) {
-    temp = strtok(NULL,':');    
-  }
+  Serial.print(F("GSM ts: "));//Serial.println(temp2);
+//  postData.ts = temp2;
 }
+
 void flushSerial() {
   while (Serial.available())
     Serial.read();
@@ -477,22 +462,3 @@ uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout) {
   buff[buffidx] = 0;  // null term
   return buffidx;
 }
-//      switch(stat) {//saving to document gps status
-//        case 0:
-//          Serial.println(F("GPS off"));
-//          break;
-//        case 1:
-//          Serial.println(F("No fix"));
-//          break;
-//        case 2:
-//          Serial.println(F("2D fix"));
-//          break;
-//        case 3:
-//          Serial.println(F("3D fix"));
-//          break;
-//        default:
-//          Serial.println(F("Failed to query"));
-//          break;
-//      }
-
-
