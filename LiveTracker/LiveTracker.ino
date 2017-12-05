@@ -5,8 +5,8 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-//#define TEST_MODE true
-#define TEST_MODE false
+#define TEST_MODE true
+//#define TEST_MODE false
 #define LOOP_TIME 5000
 #define POST_TIME 16250
 #define DIGITAL_READ_TIME 100
@@ -239,9 +239,9 @@ void loop() {
       if(stat == 2 || stat == 3) {//if you have a 2d or 3d GPS fix
         Serial.print(F("GPSDATA: "));Serial.println(gpsData);
         parseGPS(gpsData);
-//        if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
-//          parseGSM(gsmData);
-//        }
+        if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
+          parseGSM(gsmData);
+        }
 
         Serial.println(F("Data to POST: "));
         buildPost(); 
@@ -315,13 +315,13 @@ void loop() {
 }
 
 void buildPost() {//build post
-  Serial.println(F("build post"));
+//  Serial.println(F("build post"));
   sprintf(tempBuff, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%d%s%d%s%d%s%d%s%d", POST_URL, "id=",
   postData.id, "&ts=", postData.ts, "&lat=", postData.lat, "&lon=", postData.lon,"&alt=",
   postData.alt,"&spd=",postData.spd,"&gps_sig=",postData.gps_sig,"&cell_sig=",
   postData.cell_sig,"&batt=",postData.batt,"&trp=",postData.trp,"&sts=",postData.sts);
-  printPostData();
-  Serial.print(F("Post: "));Serial.println(tempBuff);
+//  printPostData();
+//  Serial.print(F("Post: "));Serial.println(tempBuff);
 }
 
 void printPostData() {
@@ -340,12 +340,12 @@ void printPostData() {
 }
 
 void parseGPS(char* gpsChar) {
-  Serial.print(F("GPS in: "));Serial.println(gpsChar);
+//  Serial.print(F("GPS in: "));Serial.println(gpsChar);
   char* temp;
   temp = strtok(gpsChar,",");
   int loc = 1;
   while(temp != NULL) {
-    Serial.println(temp);
+//    Serial.println(temp);
     switch(loc) {
       case 3:
         postData.ts = temp;
@@ -379,10 +379,10 @@ void parseGSM(char* gsmChar) {
   char* pre;
   char* post;
   temp = strtok(gsmChar,",");
-  Serial.print(F("gsmChar: "));Serial.println(temp);
+//  Serial.print(F("gsmChar: "));Serial.println(temp);
   int loc = 1;
   while(temp != NULL) {
-    Serial.println(temp);
+//    Serial.println(temp);
     switch(loc) {
       case 1:
         postData.lat = temp;
@@ -408,19 +408,20 @@ void parseGSM(char* gsmChar) {
 
 void parseGSMTime() {
 //2017/12/01,00:23:43
-  Serial.print(F("GSM pre-mod ts: "));Serial.println(postData.ts);
+//  Serial.print(F("GSM pre-mod ts: "));Serial.println(postData.ts);
   char* temp;
-  char* temp2;
 
   temp = strtok(postData.ts,"/:");
-  strcpy(temp2, temp);
-  for(int i = 0; i < 5; i++) {
-    Serial.println(temp);
-    temp = strtok(NULL,"/:");
-    strcat(temp2, temp);
+  if(temp != NULL) {
+    strcpy(postData.ts, temp);
   }
-  Serial.print(F("GSM ts: "));//Serial.println(temp2);
-//  postData.ts = temp2;
+//  for(int i = 0; i < 5; i++) {
+  while(temp != NULL) {
+//    Serial.println(temp);
+    temp = strtok(NULL,"/:");
+    strcat(postData.ts, temp);
+  }
+//  Serial.print(F("GSM ts: "));Serial.println(postData.ts);
 }
 
 void flushSerial() {
