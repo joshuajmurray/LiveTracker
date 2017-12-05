@@ -5,8 +5,8 @@
 #define FONA_TX 3
 #define FONA_RST 4
 #define POST_URL "http://wilsonja.pythonanywhere.com/?"
-#define TEST_MODE true
-//#define TEST_MODE false
+//#define TEST_MODE true
+#define TEST_MODE false
 #define LOOP_TIME 5000
 #define POST_TIME 16250
 #define DIGITAL_READ_TIME 100
@@ -187,15 +187,10 @@ void loop() {
 
 //       check for GSMLOC (requires GPRS)*******start******
         uint16_t returncode;  
-        if (!fona.getGSMLoc(&returncode, gsmData, 250))
+        if (!fona.getGSMLoc(&returncode, gsmData, 250)) {
           Serial.println(F("GPS Failed!"));
-        if (returncode == 0) {
-//          Serial.print(F("GSM DATA: "));
-//          Serial.print(gsmData);
-//          Serial.print(F("size: "));Serial.print(sizeof(gsmData));
-//          Serial.println(F("**GSM DATA END**"));
-          //parse GPS data
-        } else {
+        }
+        if (returncode != 0) {
           Serial.print(F("Fail code #")); Serial.println(returncode);
         }
 //     // check for GSMLOC (requires GPRS)*******end******
@@ -204,27 +199,20 @@ void loop() {
     case CHECK_SIGNAL://*************************************************************************
       if(stat != "3" && (postData.satCount) < 4) {
         gsmLocation = true;
-        Serial.println(F("USE GSM LOCATION"));
       } else {
         gsmLocation = false;
-        Serial.println(F("USE GPS LOCATION"));
       }
-      Serial.print(F("stat: "));Serial.println(stat);
-      Serial.print(F("satCount: "));Serial.println(postData.satCount);
       state = WAIT_STATE;
       break;
     case WAIT_STATE://*************************************************************************
-//      Serial.println("WAIT  ");
+//      Serial.println(F("WAIT  "));
       if(millis() >= postTimer) {
         state = POST_STATE;
-//      Serial.println("POST");
         postTimer = (millis() + POST_TIME);
       }else if(millis() >= loopTimer) {
-//      Serial.println("LOOP");
         state = GET_DATA_STATE;
         loopTimer = (millis() + LOOP_TIME);
       }else if(millis() >= digitalReadTimer) {
-//      Serial.println("READ DIG");
         state = READ_DIGITAL_STATE;
         digitalReadTimer = (millis() + DIGITAL_READ_TIME);
       }
@@ -235,25 +223,24 @@ void loop() {
       
       break;
     case POST_STATE://*************************************************************************
-//      Serial.println("POST SOME DATA NOW");
+//      Serial.println(F("POST SOME DATA NOW"));
       if(stat == 2 || stat == 3) {//if you have a 2d or 3d GPS fix
-        Serial.print(F("GPSDATA: "));Serial.println(gpsData);
+//        Serial.print(F("GPSDATA: "));Serial.println(gpsData);
         parseGPS(gpsData);
         if(gsmLocation) {//if flag is set use lat,lon and time from GSM rather than GPS
           parseGSM(gsmData);
         }
 
-        Serial.println(F("Data to POST: "));
+//        Serial.println(F("Data to POST: "));
         buildPost(); 
              
         uint16_t statuscode;
         int16_t length;
-//        char data[1] = {' '};//need to look into the adafruit library but this works for now..     
         char data[1] = " ";//need to look into the adafruit library but this works for now..     
         flushSerial();
 
         if(!TEST_MODE) {        
-          Serial.println(F("****"));
+//          Serial.println(F("****"));
           if (!fona.HTTP_POST_start(tempBuff, F("text/plain"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
             Serial.println(F("Failed!"));
           }else {
@@ -273,11 +260,11 @@ void loop() {
               }
             }
           
-            Serial.println(F("\n****"));
+//            Serial.println(F("\n****"));
             fona.HTTP_POST_end();
           }
       
-          Serial.println("*******POST DONE*******");
+//          Serial.println(F("*******POST DONE*******"));
         }
       }//end of case for needing 3dfix      state = WAIT_STATE;
 
@@ -315,13 +302,11 @@ void loop() {
 }
 
 void buildPost() {//build post
-//  Serial.println(F("build post"));
   sprintf(tempBuff, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%d%s%d%s%d%s%d%s%d", POST_URL, "id=",
   postData.id, "&ts=", postData.ts, "&lat=", postData.lat, "&lon=", postData.lon,"&alt=",
   postData.alt,"&spd=",postData.spd,"&gps_sig=",postData.gps_sig,"&cell_sig=",
   postData.cell_sig,"&batt=",postData.batt,"&trp=",postData.trp,"&sts=",postData.sts);
 //  printPostData();
-//  Serial.print(F("Post: "));Serial.println(tempBuff);
 }
 
 void printPostData() {
@@ -340,12 +325,10 @@ void printPostData() {
 }
 
 void parseGPS(char* gpsChar) {
-//  Serial.print(F("GPS in: "));Serial.println(gpsChar);
   char* temp;
   temp = strtok(gpsChar,",");
   int loc = 1;
   while(temp != NULL) {
-//    Serial.println(temp);
     switch(loc) {
       case 3:
         postData.ts = temp;
@@ -371,7 +354,7 @@ void parseGPS(char* gpsChar) {
     temp = strtok(NULL,",");
     loc++;
   }
-  printPostData();
+//  printPostData();
 }
 
 void parseGSM(char* gsmChar) {
@@ -379,16 +362,14 @@ void parseGSM(char* gsmChar) {
   char* pre;
   char* post;
   temp = strtok(gsmChar,",");
-//  Serial.print(F("gsmChar: "));Serial.println(temp);
   int loc = 1;
   while(temp != NULL) {
-//    Serial.println(temp);
     switch(loc) {
       case 1:
-        postData.lat = temp;
+        postData.lon = temp;
       break;
       case 2:
-        postData.lon = temp;
+        postData.lat = temp;
       break;
       case 3:
         pre = temp;
@@ -407,21 +388,15 @@ void parseGSM(char* gsmChar) {
 }
 
 void parseGSMTime() {
-//2017/12/01,00:23:43
-//  Serial.print(F("GSM pre-mod ts: "));Serial.println(postData.ts);
   char* temp;
-
   temp = strtok(postData.ts,"/:");
   if(temp != NULL) {
     strcpy(postData.ts, temp);
   }
-//  for(int i = 0; i < 5; i++) {
   while(temp != NULL) {
-//    Serial.println(temp);
     temp = strtok(NULL,"/:");
     strcat(postData.ts, temp);
   }
-//  Serial.print(F("GSM ts: "));Serial.println(postData.ts);
 }
 
 void flushSerial() {
